@@ -1,0 +1,80 @@
+﻿@page "/todoapp"
+@using System.Text.Json
+@inject IJSRuntime JsRuntime
+
+<h1>TodoApp</h1>
+
+<p>
+    <input @bind="newNotes"/>&nbsp;
+    <button class="btn btn-primary" @onclick="addNewNotes">Agregar nota</button>
+</p>
+
+@foreach (var note in notes)
+{
+    <p>
+        <b>@note.descripction</b>&nbsp;
+        <button class="btn btn-primary" @onclick="(()=>deleteNotes(note.id))">Eliminar nota</button>
+    </p>
+}
+
+@code {
+
+    public string newNotes = "";
+    public class Notes
+    {
+        public int id { get; set; }
+        public string? descripction { get; set; }
+    }
+
+    string API_URL = "http://localhost:5198/";
+
+    private IEnumerable<Notes> notes = Array.Empty<Notes>();
+
+    private async Task refreshList()
+    {
+        HttpClient httpClient = new HttpClient();
+        HttpResponseMessage response = await httpClient.GetAsync(API_URL + "api/TodoApp/GetNotes");
+        httpClient.Dispose();
+        using var responseStream = await response.Content.ReadAsStreamAsync();
+        notes = await JsonSerializer.DeserializeAsync<IEnumerable<Notes>>(responseStream);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await this.refreshList();
+    }
+
+    private async Task addNewNotes()
+    {
+        var formData = new MultipartFormDataContent();
+        formData.Add(new StringContent(newNotes), "newNotes");
+
+        HttpClient httpClient = new HttpClient();
+        HttpResponseMessage response = await httpClient.PostAsync(API_URL + "api/TodoApp/AddNotes", formData);
+        httpClient.Dispose();
+        using var responseStream = await response.Content.ReadAsStreamAsync();
+
+        string res = response.Content.ReadAsStringAsync().Result;
+        await JsRuntime.InvokeVoidAsync("alert", res);
+        await this.refreshList();
+    }
+
+    private async Task deleteNotes(int id)
+    {
+        HttpClient httpClient = new HttpClient();
+        HttpResponseMessage response = await httpClient.DeleteAsync(API_URL + "api/TodoApp/DeleteNotes?id=" + id);
+        httpClient.Dispose();
+
+        if (response.IsSuccessStatusCode)
+        {
+            // Note successfully deleted, update UI
+            await JsRuntime.InvokeVoidAsync("alert", "Nota eliminada");
+            await refreshList();
+        }
+        else
+        {
+            // Handle deletion error (optional)
+            await JsRuntime.InvokeVoidAsync("alert", "Error al eliminar la nota");
+        }
+    }
+}
